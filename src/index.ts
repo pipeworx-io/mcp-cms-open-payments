@@ -5,7 +5,11 @@ interface McpToolDefinition {
     type: 'object';
     properties: Record<string, unknown>;
     required?: string[];
+    anyOf?: Array<{ required: string[] }>;
+    oneOf?: Array<{ required: string[] }>;
+    allOf?: Array<{ required: string[] }>;
   };
+  outputSchema?: Record<string, unknown>;
 }
 
 interface McpToolExport {
@@ -94,7 +98,67 @@ const tools: McpToolExport['tools'] = [
     }},
     outputSchema: paymentListSchema,
   },
+  {
+    name: 'open_payments_recipient_history',
+    description: 'Build a cross-year CMS Open Payments history for an exact recipient NPI. Returns authoritative annual match counts plus bounded samples; sampled dollar totals are explicitly not full-dataset totals.',
+    inputSchema: { type: 'object', properties: {
+      npi: { type: 'string' }, from_year: { type: 'number' }, to_year: { type: 'number' },
+      payment_type: { type: 'string', enum: ['General', 'Research', 'Ownership'] },
+      sample_per_year: { type: 'number', description: 'Rows per year (1-100, default 25).' },
+    }, required: ['npi'] },
+    outputSchema: historySchema(),
+  },
+  {
+    name: 'open_payments_company_history',
+    description: 'Build a cross-year CMS Open Payments history for a company-name substring. Annual counts are authoritative for that query; dollar figures cover only the returned bounded sample and company aliases may split or combine legal entities.',
+    inputSchema: { type: 'object', properties: {
+      company: { type: 'string' }, from_year: { type: 'number' }, to_year: { type: 'number' },
+      payment_type: { type: 'string', enum: ['General', 'Research', 'Ownership'] }, sample_per_year: { type: 'number' },
+    }, required: ['company'] },
+    outputSchema: historySchema(),
+  },
+  {
+    name: 'open_payments_product_history',
+    description: 'Build a cross-year general-payment history for a reported product-name substring across CMS product slots. Product association is reporter-supplied; sample dollar amounts are not complete annual totals.',
+    inputSchema: { type: 'object', properties: {
+      product: { type: 'string' }, company: { type: 'string' }, from_year: { type: 'number' },
+      to_year: { type: 'number' }, sample_per_year: { type: 'number' },
+    }, required: ['product'] },
+    outputSchema: historySchema(),
+  },
+  {
+    name: 'open_payments_compare_companies',
+    description: 'Compare 2–5 company-name queries across CMS Open Payments program years using authoritative match counts and clearly labeled bounded samples. This does not compare complete spend unless every matching row fits in the sample.',
+    inputSchema: { type: 'object', properties: {
+      companies: { type: 'array', items: { type: 'string' }, minItems: 2, maxItems: 5 },
+      from_year: { type: 'number' }, to_year: { type: 'number' },
+      payment_type: { type: 'string', enum: ['General', 'Research', 'Ownership'] }, sample_per_year: { type: 'number' },
+    }, required: ['companies'] },
+    outputSchema: { type: 'object', properties: {
+      companies: { type: 'array', items: { type: 'object' } }, interpretation: { type: 'string' },
+    }, required: ['companies', 'interpretation'] },
+  },
+  {
+    name: 'open_payments_nature_breakdown',
+    description: 'Break down the bounded payment sample for one recipient, company, or product across years by reported nature of payment. Counts and dollars in the breakdown are sample statistics; annual total_matches remains the authoritative query count.',
+    inputSchema: { type: 'object', properties: {
+      npi: { type: 'string' }, company: { type: 'string' }, product: { type: 'string' },
+      from_year: { type: 'number' }, to_year: { type: 'number' }, sample_per_year: { type: 'number' },
+    }},
+    outputSchema: { type: 'object', properties: {
+      years: { type: 'array', items: { type: 'object' } }, nature_breakdown: { type: 'array', items: { type: 'object' } },
+      interpretation: { type: 'string' },
+    }, required: ['years', 'nature_breakdown', 'interpretation'] },
+  },
 ];
+
+function historySchema() {
+  return { type: 'object', properties: {
+    years: { type: 'array', items: { type: 'object' } }, total_matches_across_years: { type: 'number' },
+    sampled_records: { type: 'number' }, sampled_amount_usd: { type: 'number' },
+    interpretation: { type: 'string' },
+  }, required: ['years', 'total_matches_across_years', 'sampled_records', 'sampled_amount_usd', 'interpretation'] };
+}
 
 async function callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
   switch (name) {
@@ -107,8 +171,83 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<un
       return searchPayments({ ...args, payment_type: 'General', product: requiredString(args, 'product') });
     case 'open_payments_research':
       return searchPayments({ ...args, payment_type: 'Research' });
+    case 'open_payments_recipient_history':
+      return paymentHistory({ ...args, recipient_npi: requiredString(args, 'npi') });
+    case 'open_payments_company_history':
+      return paymentHistory({ ...args, company: requiredString(args, 'company') });
+    case 'open_payments_product_history':
+      return paymentHistory({ ...args, payment_type: 'General', product: requiredString(args, 'product') });
+    case 'open_payments_compare_companies':
+      return compareCompanies(args);
+    case 'open_payments_nature_breakdown':
+      return natureBreakdown(args);
     default: throw new Error(`Unknown tool: ${name}`);
   }
+}
+
+async function paymentHistory(args: Record<string, unknown>) {
+  const [from, to] = yearRange(args);
+  const samplePerYear = intArg(args.sample_per_year, 25, 1, 100);
+  const years = await Promise.all(Array.from({ length: to - from + 1 }, (_, i) => from + i).map(async (year) => {
+    const result = await searchPayments({ ...args, year, limit: samplePerYear, offset: 0 }) as Record<string, any>;
+    const sampledAmount = result.payments.reduce((sum: number, p: Record<string, any>) => sum + (Number(p.amount_usd) || 0), 0);
+    return {
+      program_year: year, total_matches: result.total_matches, sampled_records: result.returned,
+      sampled_amount_usd: sampledAmount, dataset: result.dataset, payments: result.payments,
+    };
+  }));
+  return {
+    years,
+    total_matches_across_years: years.reduce((sum, y) => sum + y.total_matches, 0),
+    sampled_records: years.reduce((sum, y) => sum + y.sampled_records, 0),
+    sampled_amount_usd: years.reduce((sum, y) => sum + y.sampled_amount_usd, 0),
+    interpretation: 'Annual total_matches values are authoritative for the stated query. sampled_amount_usd and sampled_records cover only the bounded returned rows and must not be presented as complete payment totals.',
+  };
+}
+
+async function compareCompanies(args: Record<string, unknown>) {
+  const companies = Array.isArray(args.companies)
+    ? args.companies.map(stringArg).filter((v): v is string => Boolean(v)) : [];
+  if (companies.length < 2 || companies.length > 5) throw new Error('companies must contain 2-5 non-empty names');
+  const [from, to] = yearRange(args);
+  if ((to - from + 1) * companies.length > 20) {
+    throw new Error('company comparison is limited to 20 company-year combinations');
+  }
+  const results = await Promise.all(companies.map(async (company) => ({
+    company, ...(await paymentHistory({ ...args, company })),
+  })));
+  return {
+    companies: results,
+    interpretation: 'Compare authoritative match counts, not sampled dollar amounts, unless sampled_records equals total_matches for every year. Company substring matching can combine aliases or similarly named legal entities.',
+  };
+}
+
+async function natureBreakdown(args: Record<string, unknown>) {
+  const filters = [stringArg(args.npi), stringArg(args.company), stringArg(args.product)].filter(Boolean);
+  if (filters.length !== 1) throw new Error('Provide exactly one of npi, company, or product.');
+  const history = await paymentHistory({
+    ...args, recipient_npi: stringArg(args.npi), payment_type: 'General',
+  }) as Record<string, any>;
+  const buckets = new Map<string, { nature: string; sampled_records: number; sampled_amount_usd: number }>();
+  for (const year of history.years) for (const payment of year.payments) {
+    const nature = String(payment.nature ?? 'Unspecified');
+    const bucket = buckets.get(nature) ?? { nature, sampled_records: 0, sampled_amount_usd: 0 };
+    bucket.sampled_records++; bucket.sampled_amount_usd += Number(payment.amount_usd) || 0; buckets.set(nature, bucket);
+  }
+  return {
+    years: history.years.map(({ payments: _payments, ...year }: Record<string, any>) => year),
+    nature_breakdown: [...buckets.values()].sort((a, b) => b.sampled_amount_usd - a.sampled_amount_usd),
+    interpretation: 'Nature breakdown counts and dollars describe only the bounded returned sample. Use each year’s total_matches for complete query counts; CMS-reported payments do not imply wrongdoing.',
+  };
+}
+
+function yearRange(args: Record<string, unknown>): [number, number] {
+  const latest = new Date().getUTCFullYear() - 1;
+  const from = args.from_year == null ? Math.max(2019, latest - 4) : yearArg(args.from_year);
+  const to = args.to_year == null ? latest : yearArg(args.to_year);
+  if (from > to) throw new Error('from_year must not be after to_year');
+  if (to - from > 7) throw new Error('year range may span at most 8 program years');
+  return [from, to];
 }
 
 interface Condition { property?: string; value?: string | number; operator?: string; groupOperator?: string; conditions?: Condition[] }
