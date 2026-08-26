@@ -2,13 +2,14 @@
 
 CMS Open Payments, with annual dataset discovery through the official DKAN API.
 
-Part of [Pipeworx](https://pipeworx.io) — an MCP gateway connecting AI agents to 1394+ live data sources.
+Part of [Pipeworx](https://pipeworx.io) — an MCP gateway connecting AI agents to 1476+ live data sources.
 
 ## Tools
 
 | Tool | Description |
 |------|-------------|
-| `open_payments_search` | Search one CMS Open Payments program-year dataset using structured recipient, company, product, geography, payment-nature, and amount filters. CMS publishes company-reported relationships; a payment does not imply wrongdoing or a conflict. |
+| `open_payments_top_companies` | Rank the drug and device manufacturers that paid US physicians and teaching hospitals the most in a program year — the "who spends the most on doctors" question. Returns each company with its total US dollars, payment count and how many distinct recipients it reached, ordered by spend. CMS publishes no aggregate and its live API cannot group over the 14-million-row payment table, so this reads a summary computed offline; the response states the program year and when the summary was refreshed. Payments are disclosures of transfers of value, not evidence of wrongdoing. |
+| `open_payments_search` | THE source for pharma/device industry money to doctors — "payments from manufacturers to physicians", "which drug companies paid this doctor", "Sunshine Act data", "industry payments to hospitals". Search one CMS Open Payments program-year dataset using structured recipient, company, product, geography, payment-nature, and amount filters. CAPABILITY LIMIT, state it rather than guessing: this source can look up and filter but CANNOT rank ALL manufacturers by total spend ("which manufacturer paid the most" is not computable live — the 14M-row aggregation times out upstream); answer those by saying so and offering a named-company lookup (open_payments_company) instead. CMS publishes company-reported relationships; a payment does not imply wrongdoing or a conflict. |
 | `open_payments_physician` | Find CMS Open Payments records for a physician/non-physician practitioner by exact NPI in one program year. Returns the authoritative total match count plus a bounded payment sample; reported relationships do not imply misconduct. If you have a name rather than an NPI, resolve it first against the NPPES registry (npi_individual in the clinicaltables pack), or use open_payments_search with recipient_last_name + recipient_first_name. |
 | `open_payments_company` | Search payments reported by a manufacturer or GPO in one CMS Open Payments program year. Company matching is a case-insensitive substring and may combine similarly named legal entities. |
 | `open_payments_product` | Search general-payment records associated with a named drug, biologic, device, or medical supply across all five CMS product slots. Product association is reporting-entity supplied and does not prove the payment was exclusively for that product. |
@@ -33,7 +34,25 @@ Add to your MCP client (Claude Desktop, Cursor, Windsurf, etc.):
 }
 ```
 
-Or connect to the full Pipeworx gateway for access to all 1394+ data sources:
+### What this endpoint actually serves
+
+`tools/list` at `https://gateway.pipeworx.io/cms-open-payments/mcp` returns the tools in the table
+above **plus the shared Pipeworx meta-tools** — `ask_pipeworx`,
+`discover_tools`, `search_within`, `remember`/`recall` and the rest of the
+gateway-wide set. So the tool count you see is larger than this table: a
+single-pack endpoint currently lists roughly 30 shared tools alongside the
+pack's own. The connection's `initialize` response states its exact scope, and
+is the authoritative answer for a given day.
+
+This is deliberate, not multiplexing by accident. The meta-tools are what let a
+scoped connection answer a question this pack does not cover — via
+`ask_pipeworx`, which routes across the whole catalog — without you adding a
+second MCP server. There is currently no way to mount a pack endpoint without
+them; if the extra schemas cost you more context than the routing is worth,
+connect to the full gateway once rather than to several pack endpoints.
+
+Or connect to the full Pipeworx gateway to get every pack's tools listed
+directly, instead of just this one's:
 
 ```json
 {
@@ -45,9 +64,14 @@ Or connect to the full Pipeworx gateway for access to all 1394+ data sources:
 }
 ```
 
+Both URLs reach the same gateway and the same 1476+ data sources. The
+only difference is which pack's tools are listed **directly**; `ask_pipeworx`
+reaches all of them from either one.
+
 ## Using with ask_pipeworx
 
-Instead of calling tools directly, you can ask questions in plain English:
+Instead of calling tools directly, you can ask questions in plain English —
+this works on the pack endpoint above as well as on the full gateway:
 
 ```
 ask_pipeworx({ question: "your question about Cms Open Payments data" })
