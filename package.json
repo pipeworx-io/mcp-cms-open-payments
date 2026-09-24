@@ -1,20 +1,32 @@
 {
   "name": "@pipeworx/mcp-cms-open-payments",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "CMS Open Payments, with annual dataset discovery through the official DKAN API.",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
+  "bin": {
+    "mcp-cms-open-payments": "bin/cli.js"
+  },
   "keywords": ["mcp", "mcp-server", "model-context-protocol", "pipeworx", "cms-open-payments"],
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/pipeworx-io/mcp-cms-open-payments"
+    "url": "git+https://github.com/pipeworx-io/mcp-cms-open-payments.git"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "tsx": "^4.19.0"
+  },
   "devDependencies": {
-    "typescript": "^5.7.0"
+    "typescript": "^5.9.3",
+    "@cloudflare/workers-types": "^4.20260405.1"
+  },
+  "pipeworx": {
+    "sourceHash": "v1-b896a32ca4b2b6a7357eca65543c1b51b4b1a4fcf662dc3f7edeb20ab29631c9",
+    "sourceCommit": "60f04b68c347e970c6be94a53439d1364061fc06"
   }
 }

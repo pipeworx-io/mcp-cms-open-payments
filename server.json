@@ -3,7 +3,7 @@
   "name": "io.github.pipeworx-io/cms-open-payments",
   "title": "Cms Open Payments",
   "description": "CMS Open Payments, with annual dataset discovery through the official DKAN API.",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "websiteUrl": "https://pipeworx.io/packs/cms-open-payments",
   "repository": {
     "url": "https://github.com/pipeworx-io/mcp-cms-open-payments",
