@@ -9,7 +9,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import pack from './index.js';
 
 const server = new Server(
-  { name: '@pipeworx/mcp-cms-open-payments', version: '0.1.5' },
+  { name: '@pipeworx/mcp-cms-open-payments', version: '0.1.6' },
   { capabilities: { tools: {} } },
 );
 

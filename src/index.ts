@@ -683,6 +683,15 @@ async function pwFetch(url: string | URL, init?: RequestInit): Promise<Response>
 }
 
 const BASE = 'https://openpaymentsdata.cms.gov/api/1';
+// openpaymentsdata.cms.gov sits behind a WAF that returns 403 "Access Denied"
+// to any request with NO User-Agent header — live-confirmed from the real
+// Workers egress, fleet #2947, 2026-10-12: identical POST body to
+// /datastore/query got 403 with no UA and 200 with one, from the same IP in
+// the same request. The gateway's generic classifier read that 403 as
+// "upstream_throttled", which is the wrong diagnosis — CMS was never
+// rate-limiting us, it was identifying us as a bot with no name. Every
+// request to this host now carries one.
+const UA = 'pipeworx/1.0 (+https://pipeworx.io)';
 const MAX_BYTES = 4_000_000;
 type PaymentType = 'General' | 'Research' | 'Ownership';
 
@@ -1044,7 +1053,7 @@ async function searchPayments(args: Record<string, unknown>) {
     count: true,
   };
   const response = await pwFetch(`${BASE}/datastore/query`, {
-    method: 'POST', headers: { 'content-type': 'application/json', Accept: 'application/json' },
+    method: 'POST', headers: { 'content-type': 'application/json', Accept: 'application/json', 'User-Agent': UA },
     body: JSON.stringify(body),
   });
   const payload = await boundedJson(response, 'CMS Open Payments query');
@@ -1065,7 +1074,7 @@ async function resolveDataset(year: number, type: PaymentType) {
   url.searchParams.set('fulltext', 'payments');
   url.searchParams.set('page-size', '100');
   url.searchParams.set('facets', '0');
-  const payload = await boundedJson(await pwFetch(url, { headers: { Accept: 'application/json' } }), 'CMS metadata search');
+  const payload = await boundedJson(await pwFetch(url, { headers: { Accept: 'application/json', 'User-Agent': UA } }), 'CMS metadata search');
   const datasets = payload.results && typeof payload.results === 'object' ? Object.values(payload.results) as Array<Record<string, any>> : [];
   const title = `${year} ${type} Payment Data`;
   const match = datasets.find((row) => row.title === title);
