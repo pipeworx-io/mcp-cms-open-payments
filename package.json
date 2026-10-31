@@ -1,6 +1,6 @@
 {
   "name": "@pipeworx/mcp-cms-open-payments",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "CMS Open Payments, with annual dataset discovery through the official DKAN API.",
   "type": "module",
   "main": "lib/index.js",
@@ -27,7 +27,7 @@
     "mode": "gateway",
     "slug": "cms-open-payments",
     "gatewaySlug": "cms-open-payments",
-    "sourceHash": "v1-a8d98b1a8de0407ceb842d822a24ced0a536caea0d516326595328b16a27e1d3",
-    "sourceCommit": "4277282d72f9bf55e548b3799aaf737baf22152f"
+    "sourceHash": "v1-f04d53f7e6d5c50a5941343730060ab01ff7bab9186524f16e07b2f2b4ee3778",
+    "sourceCommit": "8cc978183948532674e797c429305c9d8ab2a1c3"
   }
 }
